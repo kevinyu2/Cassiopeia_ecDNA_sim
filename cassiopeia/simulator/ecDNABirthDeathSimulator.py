@@ -5,7 +5,7 @@ variety of division and fitness regimes to be specified by the user.
 """
 
 from random import random
-from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union, Literal
 
 import networkx as nx
 import numpy as np
@@ -105,15 +105,31 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             on living lineages downstream.
         random_seed: A seed for reproducibility
         initial_copy_number: Initial copy number for parental lineage.
+        cosegregation_type: Type of cosegregation simulation. "coefficient" is
+            the simplest and just uses the first species as the main driver.
+            "venn" is the venn diagram model, requiring a dict describing each
+            correlation. "sumulation" simulates binding events, deals the best
+            with species of different copy numbers, but has worse runtime
         cosegregation_coefficient: A coefficient describing how likely it is for
             one species to be co-inherited with one specific species (currently
             modeled as the first in the array).
-            TODO: how do we make this generalizable to multiple species each
-            with different pairwise covariances?
         splitting_function: As implemented, the function that describes
             segregation of each species at cell division.
-            TODO: fix this implementation to allow for non-independent
-            segregation.
+        coeff_venn: for venn cosegregation. 
+            A dict with tuples to floats, where (0,1) : 0.5 represents
+            0.5 correlation between species 0 and 1. Note that the total 
+            correlation between species x and species y is the sum of all 
+            correlations with species x and y in it (that is, adding (0,1,2) : 
+            0.2) would make the total correlation between 0 and 1 0.5+0.2.
+        coeff_matrix_sim: for simulation cosegregation.
+            An nxn symmetrical matrix representing how likely two species are to
+            combine (float between 0 and 1).
+        species_capacity: for simulation cosegregation.
+            The number of times each species can be bound to. List of length 
+            (number of species)
+        simulation_multiplier: for simulation cosegregation.
+            binding simulation typically runs once for each ecDNA, multiplier
+            multiplies number of binding events
         fitness_array: Fitnesses with respect to copy number of each species in
             a cell. This should be a matrix in R^e (where e is the number of
             ecDNA species being modelled).
@@ -145,9 +161,21 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         prune_dead_lineages: bool = True,
         random_seed: int = None,
         initial_copy_number: np.array = np.array([1]),
+        
+        cosegregation_type: Literal["coefficient", "venn", "simulation"] = "coefficient",
+        # coefficient
         cosegregation_coefficient: float = 0.0,
         splitting_function: Callable[[int], int] = lambda c, x: c
         + np.random.binomial(x, p=0.5),
+        
+        # venn
+        coeff_venn: Optional[Dict[Tuple[int, ...], float]] = None,
+        
+        # simulation
+        coeff_matrix_sim: Optional[list[list[float]]] = None,
+        species_capacity: Optional[list[int]] = None,
+        simulation_multiplier = 1,
+        
         fitness_array: np.array = np.array([0, 1]),
         fitness_function: Optional[Callable[[int, int, float], float]] = None,
         capture_efficiency: float = 1.0,
@@ -173,7 +201,20 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             raise TreeSimulatorError(
                 "Please specify an experiment time greater than 0"
             )
-
+        if cosegregation_type == "venn" :
+            if coeff_venn is None :
+                raise TreeSimulatorError(
+                    "To use venn segregation, please specify a dict coeff_venn"
+                )
+        if cosegregation_type == "simulation" :
+            if coeff_matrix_sim is None :
+                raise TreeSimulatorError(
+                    "To use simulation segregation, please specify a coeff_matrix_sim"
+                )
+            if species_capacity is None :
+                raise TreeSimulatorError(
+                    "To use simulation segregation, please specify a species_capacity"
+                )
         self.birth_waiting_distribution = birth_waiting_distribution
         self.initial_birth_scale = initial_birth_scale
         self.death_waiting_distribution = death_waiting_distribution
@@ -187,6 +228,10 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         self.random_seed = random_seed
         self.initial_copy_number = initial_copy_number
         self.cosegregation_coefficient = cosegregation_coefficient
+        self.coeff_venn = coeff_venn,
+        self.coeff_matrix_sim = coeff_matrix_sim,
+        self.species_capacity = species_capacity,
+        self.simulation_multiplier = simulation_multiplier,
         self.splitting_function = splitting_function
         self.fitness_array = fitness_array
         self.fitness_function = fitness_function
@@ -461,6 +506,8 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
 
             new_ecdna_array = parental_ecdna_array - child_ecdna_array
         else:
+            
+            
 
             new_ecdna_array = np.array([0] * len(parental_ecdna_array))
 
@@ -496,6 +543,8 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
                 )
 
                 new_ecdna_array[species] = inherited_fraction
+                
+        
 
         # check that new ecdnay array entries do not exceed parental entries
         if np.any(new_ecdna_array > parental_ecdna_array):
