@@ -227,6 +227,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         self.prune_dead_lineages = prune_dead_lineages
         self.random_seed = random_seed
         self.initial_copy_number = initial_copy_number
+        self.cosegregation_type = cosegregation_type
         self.cosegregation_coefficient = cosegregation_coefficient
         self.coeff_venn = coeff_venn,
         self.coeff_matrix_sim = coeff_matrix_sim,
@@ -507,44 +508,8 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             new_ecdna_array = parental_ecdna_array - child_ecdna_array
         else:
             
-            
-
-            new_ecdna_array = np.array([0] * len(parental_ecdna_array))
-
-            new_ecdna_array[0] = self.splitting_function(
-                0, parental_ecdna_array[0]
-            )
-
-            for species in range(1, len(parental_ecdna_array)):
-
-                cosegregating_compartment = int(
-                    self.cosegregation_coefficient
-                    * (new_ecdna_array[0] / max(1, parental_ecdna_array[0]))
-                    * parental_ecdna_array[species]
-                )
-                sister_cell_cosegregating = int(
-                    self.cosegregation_coefficient
-                    * (
-                        (parental_ecdna_array[0] - new_ecdna_array[0])
-                        / max(1, parental_ecdna_array[0])
-                    )
-                    * parental_ecdna_array[species]
-                )
-
-                random_compartment = (
-                    parental_ecdna_array[species]
-                    - cosegregating_compartment
-                    - sister_cell_cosegregating
-                )
-
-                inherited_fraction = self.splitting_function(
-                    cosegregating_compartment,
-                    random_compartment,
-                )
-
-                new_ecdna_array[species] = inherited_fraction
-                
-        
+            if self.cosegregation_type == "coefficient" :
+                new_ecdna_array = self.cosegregation_correlation_split(parental_ecdna_array)
 
         # check that new ecdnay array entries do not exceed parental entries
         if np.any(new_ecdna_array > parental_ecdna_array):
@@ -627,3 +592,43 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             )
 
         return cassiopeia_tree
+        
+    def cosegregation_correlation_split(self, parental_ecdna_array) :
+
+
+        new_ecdna_array = np.array([0] * len(parental_ecdna_array))
+
+        new_ecdna_array[0] = self.splitting_function(
+            0, parental_ecdna_array[0]
+        )
+
+        for species in range(1, len(parental_ecdna_array)):
+
+            cosegregating_compartment = int(
+                self.cosegregation_coefficient
+                * (new_ecdna_array[0] / max(1, parental_ecdna_array[0]))
+                * parental_ecdna_array[species]
+            )
+            sister_cell_cosegregating = int(
+                self.cosegregation_coefficient
+                * (
+                    (parental_ecdna_array[0] - new_ecdna_array[0])
+                    / max(1, parental_ecdna_array[0])
+                )
+                * parental_ecdna_array[species]
+            )
+
+            random_compartment = (
+                parental_ecdna_array[species]
+                - cosegregating_compartment
+                - sister_cell_cosegregating
+            )
+
+            inherited_fraction = self.splitting_function(
+                cosegregating_compartment,
+                random_compartment,
+            )
+
+            new_ecdna_array[species] = inherited_fraction
+
+        return new_ecdna_array
