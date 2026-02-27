@@ -231,10 +231,10 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         self.initial_copy_number = initial_copy_number
         self.cosegregation_type = cosegregation_type
         self.cosegregation_coefficient = cosegregation_coefficient
-        self.coeff_venn = coeff_venn,
-        self.coeff_matrix_sim = coeff_matrix_sim,
-        self.species_capacity = species_capacity,
-        self.simulation_multiplier = simulation_multiplier,
+        self.coeff_venn = coeff_venn
+        self.coeff_matrix_sim = coeff_matrix_sim
+        self.species_capacity = species_capacity
+        self.simulation_multiplier = simulation_multiplier
         self.splitting_function = splitting_function
         self.fitness_array = fitness_array
         self.fitness_function = fitness_function
