@@ -512,9 +512,9 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             
             if self.cosegregation_type == "coefficient" :
                 new_ecdna_array = self.cosegregation_correlation_split(parental_ecdna_array)
-            elif self.cosegregation_coefficient == "venn" :
+            elif self.cosegregation_type == "venn" :
                 new_ecdna_array = self.venn_split(parental_ecdna_array)
-            elif self.cosegregation_coefficient == "simulation" :
+            elif self.cosegregation_type == "simulation" :
                 new_ecdna_array = self.split_sim(parental_ecdna_array)
             else :
                 raise ecDNABirthDeathSimulatorError(
