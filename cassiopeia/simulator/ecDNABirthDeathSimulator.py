@@ -10,6 +10,8 @@ from typing import Any, Callable, Dict, Generator, List, Optional, Tuple, Union,
 import networkx as nx
 import numpy as np
 import pandas as pd
+from collections import defaultdict
+import math
 
 from queue import PriorityQueue
 
@@ -510,6 +512,16 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             
             if self.cosegregation_type == "coefficient" :
                 new_ecdna_array = self.cosegregation_correlation_split(parental_ecdna_array)
+            elif self.cosegregation_coefficient == "venn" :
+                new_ecdna_array = self.venn_split(parental_ecdna_array)
+            elif self.cosegregation_coefficient == "simulation" :
+                new_ecdna_array = self.split_sim(parental_ecdna_array)
+            else :
+                raise ecDNABirthDeathSimulatorError(
+                    "Unknown splitting method."
+                )
+
+
 
         # check that new ecdnay array entries do not exceed parental entries
         if np.any(new_ecdna_array > parental_ecdna_array):
@@ -632,3 +644,134 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             new_ecdna_array[species] = inherited_fraction
 
         return new_ecdna_array
+    
+
+    # Simulates via venn diagram: the percentage of each is determined, then 
+    # ecDNA for each species gets distributed based on these percentages
+    # For each section, the largest fraction is simulated, and all others follow based on the proportion in each sister cell
+    def venn_split(self, parental_ecdna_array) :
+        # Make sure coeffs are ok
+        num_ecDNA = len(parental_ecdna_array)
+
+        # Finds the coefficients for each species
+        # {species : {overlap_id : (percentage, expected, num, remainder)}}
+        coeffs_per_species = defaultdict(dict)
+
+
+        # Fill in singletons and check sums
+        for i in range(num_ecDNA) :
+            total_remainder = 0
+            sum = 0
+            for key, value in self.coeff_venn.items() :
+                if i in key :
+                    sum += value
+                    expected = parental_ecdna_array[i] * value
+                    coeffs_per_species[i][key] = (value, expected, math.floor(expected), expected - math.floor(expected))
+                    total_remainder += expected - math.floor(expected)
+            
+            if sum > 1 :
+                print("Error: coeffs sum greater than 1")
+
+            # coeffs[(i,)] = 1 - sum
+            expected = parental_ecdna_array[i] * (1 - sum)
+            coeffs_per_species[i][(i,)] = (1 - sum, expected, math.floor(expected), expected - math.floor(expected))
+            total_remainder += expected - math.floor(expected)
+        
+            # Add extras stochastically
+            total_remainder = round(total_remainder)
+            for extra in range(total_remainder) :
+
+                # Basically get random number between 0 and remainder size, use that to determine which one to go into
+                random_choice = total_remainder * random.random()
+                for key, tuple in coeffs_per_species[i].items() :
+                    if random_choice <= tuple[3] + 1e-5 :
+                        # Increment in tuple
+                        old = coeffs_per_species[i][key]
+                        coeffs_per_species[i][key] = (old[0], old[1], old[2] + 1, old[3])
+                        break
+                    else :
+                        random_choice -= tuple[3]
+
+        ## Simulate into daughter cells! ##
+        order = np.argsort(-np.array(parental_ecdna_array))
+        # Holds the first daughter cell's
+        result = np.zeros((num_ecDNA))
+        # Tracks which parts of the venn diagram have been used
+        used = set()
+        for i in order :
+            for area, tuple in coeffs_per_species[i].items() :
+                if area not in used :
+                    used.add(area)
+                    split = self.splitting_function(0, tuple[2])
+                    if tuple[2] != 0:
+                        frac = split/tuple[2]
+
+                        for species in area :
+                            result[species] += round(frac * coeffs_per_species[species][area][2])
+
+        return result
+    
+        
+    # Binding event simulation
+    def split_sim(self, parental_ecdna_array) :
+        vec = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
+        # Tracks which species
+        species_idx = np.random.permutation(vec)
+
+        num_ecDNA = len(species_idx)
+
+        # Tracks pointers to front
+        head = np.full(num_ecDNA, -1)
+
+        # Tracks how many connections left
+        capacity = np.full(num_ecDNA, -1)
+        for i in range(len(capacity)) :
+            capacity[i] = self.species_capacity[species_idx[i]]
+
+        # Tracks which sister
+        sister = np.full(num_ecDNA, -1)
+
+        # Run for multipler * number of ecDNA
+        for run_no in range(int(sum(parental_ecdna_array) * self.simulation_multiplier)) :
+            idx = np.random.randint(0, num_ecDNA)
+            species = species_idx[idx]
+            if capacity[idx] > 0 :
+                # Get random connection, make sure it isn't itself
+                rand_connection = idx
+                while rand_connection == idx :
+                    rand_connection = np.random.randint(0, num_ecDNA)
+                
+                # species interaction with themselves is the diagonal
+                if capacity[rand_connection] > 0 :
+                    rand_val = random.random()
+                    # print(f"{species_idx[rand_connection]}, {species}")
+                    # print(f"{idx}, {rand_connection}")
+                    # print(f"{rand_val}, {prob_matrix[species_idx[rand_connection]][species]}")
+
+                    # Make connection
+                    if rand_val < self.coeff_matrix_sim[species_idx[rand_connection]][species] :
+                        capacity[idx] -= 1
+                        capacity[rand_connection] -= 1
+
+                        if idx < rand_connection :
+                            head[rand_connection] = idx
+                        else :
+                            head[idx] = rand_connection
+
+        
+        # Simulate drawing into sister cells
+        result = np.zeros(len(parental_ecdna_array))
+
+        for idx in range(num_ecDNA) :
+            # Case where it is the leader
+            if head[idx] == -1 :
+                sister[idx] = np.random.randint(0, 2)
+                
+            # Case where it follows the leader
+            else :
+                sister[idx] = sister[head[idx]]
+
+            if sister[idx] == 0 :
+                    result[species_idx[idx]] += 1
+
+        return result
