@@ -682,7 +682,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             for extra in range(total_remainder) :
 
                 # Basically get random number between 0 and remainder size, use that to determine which one to go into
-                random_choice = total_remainder * random.random()
+                random_choice = total_remainder * random()
                 for key, tuple in coeffs_per_species[i].items() :
                     if random_choice <= tuple[3] + 1e-5 :
                         # Increment in tuple
