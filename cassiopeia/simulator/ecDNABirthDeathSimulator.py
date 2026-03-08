@@ -714,6 +714,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         
     # Binding event simulation
     def split_sim(self, parental_ecdna_array) :
+        parental_ecdna_array = parental_ecdna_array.astype(int)
         vec = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
         # Tracks which species
         species_idx = np.random.permutation(vec)
