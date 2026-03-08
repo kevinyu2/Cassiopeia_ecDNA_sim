@@ -743,7 +743,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
                 
                 # species interaction with themselves is the diagonal
                 if capacity[rand_connection] > 0 :
-                    rand_val = random.random()
+                    rand_val = random()
                     # print(f"{species_idx[rand_connection]}, {species}")
                     # print(f"{idx}, {rand_connection}")
                     # print(f"{rand_val}, {prob_matrix[species_idx[rand_connection]][species]}")
