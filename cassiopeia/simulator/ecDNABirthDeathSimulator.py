@@ -515,7 +515,10 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
             elif self.cosegregation_type == "venn" :
                 new_ecdna_array = self.venn_split(parental_ecdna_array)
             elif self.cosegregation_type == "simulation" :
-                new_ecdna_array = self.split_sim(parental_ecdna_array)
+                new_ecdna_array = self.split_sim_linear(parental_ecdna_array)
+            elif self.cosegregation_type == "real" :
+                new_ecdna_array = self.split_sim_realistic(parental_ecdna_array)
+
             else :
                 raise ecDNABirthDeathSimulatorError(
                     "Unknown splitting method."
@@ -712,12 +715,10 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         return result
     
         
-    # Binding event simulation
-    def split_sim(self, parental_ecdna_array) :
-        parental_ecdna_array = parental_ecdna_array.astype(int)
-        vec = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
-        # Tracks which species
-        species_idx = np.random.permutation(vec)
+    # Binding event simulation (scaling quadratically as expected)
+    def split_sim_realistic(parental_ecdna_array, species_capacity, simulation_multiplier, coeff_matrix_sim) :
+        # parental_ecdna_array = parental_ecdna_array.astype(int)
+        species_idx = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
 
         num_ecDNA = len(species_idx)
 
@@ -727,37 +728,132 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         # Tracks how many connections left
         capacity = np.full(num_ecDNA, -1)
         for i in range(len(capacity)) :
-            capacity[i] = self.species_capacity[species_idx[i]]
+            capacity[i] = species_capacity[species_idx[i]]
 
         # Tracks which sister
         sister = np.full(num_ecDNA, -1)
 
-        # Run for multipler * number of ecDNA
-        for run_no in range(int(sum(parental_ecdna_array) * self.simulation_multiplier)) :
-            idx = np.random.randint(0, num_ecDNA)
-            species = species_idx[idx]
-            if capacity[idx] > 0 :
-                # Get random connection, make sure it isn't itself
-                rand_connection = idx
-                while rand_connection == idx :
-                    rand_connection = np.random.randint(0, num_ecDNA)
-                
-                # species interaction with themselves is the diagonal
-                if capacity[rand_connection] > 0 :
-                    rand_val = random()
-                    # print(f"{species_idx[rand_connection]}, {species}")
-                    # print(f"{idx}, {rand_connection}")
-                    # print(f"{rand_val}, {prob_matrix[species_idx[rand_connection]][species]}")
+        num_collisions = int(sum(parental_ecdna_array) * sum(parental_ecdna_array) * simulation_multiplier)
+        i = np.random.randint(0, sum(parental_ecdna_array), size=num_collisions)
+        j = np.random.randint(0, sum(parental_ecdna_array)-1, size=num_collisions)
+        j += (j >= i)
+        pairs = np.stack((i, j), axis=1)
 
-                    # Make connection
-                    if rand_val < self.coeff_matrix_sim[species_idx[rand_connection]][species] :
+        # Run for multipler * number of ecDNA
+        for idx, rand_connection in pairs :
+            species = species_idx[idx]
+            if capacity[idx] > 0 and capacity[rand_connection] > 0:
+
+                rand_val = random()
+
+                # Make connection
+                if rand_val < coeff_matrix_sim[species_idx[rand_connection]][species] :
+
+                    # Find the starts of the tree
+                    idx1 = idx
+                    idx2 = rand_connection
+                    while head[idx1] != -1 :
+                        idx1 = head[idx1]
+                    while head[idx2] != -1 :
+                        idx2 = head[idx2]
+                    
+                    # If they are equal, we have already connected them!
+                    if idx1 != idx2 :
                         capacity[idx] -= 1
                         capacity[rand_connection] -= 1
 
-                        if idx < rand_connection :
-                            head[rand_connection] = idx
+                        if idx1 < idx2 :
+                            head[idx2] = idx1
                         else :
-                            head[idx] = rand_connection
+                            head[idx1] = idx2
+
+        
+        # Simulate drawing into sister cells
+        result = np.zeros(len(parental_ecdna_array))
+
+        for idx in range(num_ecDNA) :
+            # Case where it is the leader
+            if head[idx] == -1 :
+                sister[idx] = np.random.randint(0, 2)
+                
+            # Case where it follows the leader
+            else :
+                sister[idx] = sister[head[idx]]
+
+            if sister[idx] == 0 :
+                    result[species_idx[idx]] += 1
+
+        return result
+
+
+    # Binding event simulation (scaling linearly to better correspond to correlation)
+    def split_sim_linear(parental_ecdna_array, species_capacity, simulation_multiplier, coeff_matrix_sim) :
+        # parental_ecdna_array = parental_ecdna_array.astype(int)
+        species_idx = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
+
+        starts = np.cumsum([0] + parental_ecdna_array[:-1])
+
+        num_ecDNA = len(species_idx)
+
+        # Tracks pointers to front
+        head = np.full(num_ecDNA, -1)
+
+        # Tracks how many connections left
+        capacity = np.full(num_ecDNA, -1)
+        for i in range(len(capacity)) :
+            capacity[i] = species_capacity[species_idx[i]]
+
+        # Tracks which sister
+        sister = np.full(num_ecDNA, -1)
+
+        collision_starts = []
+        collision_ends = []
+
+        # Get distinct number of collisions for each pair of two ecDNA
+        for i in range(len(parental_ecdna_array)) :
+            for j in range(len(parental_ecdna_array)) :
+                if i >= j :
+                    if coeff_matrix_sim[i][j] > 0 :
+
+                        num_collisions = int((np.sqrt(parental_ecdna_array[i] * parental_ecdna_array[j]) * simulation_multiplier))
+                        collision_starts.append(starts[i] + np.random.randint(0, parental_ecdna_array[i], size=num_collisions))
+                        collision_ends.append(starts[j] + np.random.randint(0, parental_ecdna_array[j], size=num_collisions))
+        
+        if len(collision_starts) > 0 :
+            # Flatten
+            cs = np.concatenate(collision_starts)
+            ce = np.concatenate(collision_ends)
+
+            pairs = np.stack((cs, ce), axis=1)
+            np.random.shuffle(pairs)
+
+            # Run for multipler * number of ecDNA
+            for idx, rand_connection in pairs :
+                species = species_idx[idx]
+                if capacity[idx] > 0 and capacity[rand_connection] > 0:
+
+                    rand_val = random()
+
+                    # Make connection
+                    if rand_val < coeff_matrix_sim[species_idx[rand_connection]][species] :
+
+                        # Find the starts of the tree
+                        idx1 = idx
+                        idx2 = rand_connection
+                        while head[idx1] != -1 :
+                            idx1 = head[idx1]
+                        while head[idx2] != -1 :
+                            idx2 = head[idx2]
+                        
+                        # If they are equal, we have already connected them!
+                        if idx1 != idx2 :
+                            capacity[idx] -= 1
+                            capacity[rand_connection] -= 1
+
+                            if idx1 < idx2 :
+                                head[idx2] = idx1
+                            else :
+                                head[idx1] = idx2
 
         
         # Simulate drawing into sister cells
