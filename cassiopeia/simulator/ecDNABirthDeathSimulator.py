@@ -717,7 +717,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         
     # Binding event simulation (scaling quadratically as expected)
     def split_sim_realistic(self, parental_ecdna_array) :
-        # parental_ecdna_array = parental_ecdna_array.astype(int)
+        parental_ecdna_array = parental_ecdna_array.astype(int)
         species_idx = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
 
         num_ecDNA = len(species_idx)
@@ -788,7 +788,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
 
     # Binding event simulation (scaling linearly to better correspond to correlation)
     def split_sim_linear(self, parental_ecdna_array) :
-        # parental_ecdna_array = parental_ecdna_array.astype(int)
+        parental_ecdna_array = parental_ecdna_array.astype(int)
         species_idx = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
 
         starts = np.cumsum([0] + parental_ecdna_array[:-1])
