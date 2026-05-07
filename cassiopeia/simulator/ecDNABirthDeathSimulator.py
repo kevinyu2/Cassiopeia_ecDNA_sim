@@ -164,7 +164,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         random_seed: int = None,
         initial_copy_number: np.array = np.array([1]),
         
-        cosegregation_type: Literal["coefficient", "venn", "simulation"] = "coefficient",
+        cosegregation_type: Literal["coefficient", "venn", "simulation", "real"] = "coefficient",
         # coefficient
         cosegregation_coefficient: float = 0.0,
         splitting_function: Callable[[int], int] = lambda c, x: c
@@ -208,7 +208,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
                 raise TreeSimulatorError(
                     "To use venn segregation, please specify a dict coeff_venn"
                 )
-        if cosegregation_type == "simulation" :
+        if cosegregation_type == "simulation" or cosegregation_type == "real" :
             if coeff_matrix_sim is None :
                 raise TreeSimulatorError(
                     "To use simulation segregation, please specify a coeff_matrix_sim"
@@ -716,7 +716,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
     
         
     # Binding event simulation (scaling quadratically as expected)
-    def split_sim_realistic(parental_ecdna_array, species_capacity, simulation_multiplier, coeff_matrix_sim) :
+    def split_sim_realistic(self, parental_ecdna_array) :
         # parental_ecdna_array = parental_ecdna_array.astype(int)
         species_idx = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
 
@@ -728,12 +728,12 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         # Tracks how many connections left
         capacity = np.full(num_ecDNA, -1)
         for i in range(len(capacity)) :
-            capacity[i] = species_capacity[species_idx[i]]
+            capacity[i] = self.species_capacity[species_idx[i]]
 
         # Tracks which sister
         sister = np.full(num_ecDNA, -1)
 
-        num_collisions = int(sum(parental_ecdna_array) * sum(parental_ecdna_array) * simulation_multiplier)
+        num_collisions = int(sum(parental_ecdna_array) * sum(parental_ecdna_array) * self.simulation_multiplier)
         i = np.random.randint(0, sum(parental_ecdna_array), size=num_collisions)
         j = np.random.randint(0, sum(parental_ecdna_array)-1, size=num_collisions)
         j += (j >= i)
@@ -747,7 +747,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
                 rand_val = random()
 
                 # Make connection
-                if rand_val < coeff_matrix_sim[species_idx[rand_connection]][species] :
+                if rand_val < self.coeff_matrix_sim[species_idx[rand_connection]][species] :
 
                     # Find the starts of the tree
                     idx1 = idx
@@ -787,7 +787,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
 
 
     # Binding event simulation (scaling linearly to better correspond to correlation)
-    def split_sim_linear(parental_ecdna_array, species_capacity, simulation_multiplier, coeff_matrix_sim) :
+    def split_sim_linear(self, parental_ecdna_array) :
         # parental_ecdna_array = parental_ecdna_array.astype(int)
         species_idx = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
 
@@ -801,7 +801,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         # Tracks how many connections left
         capacity = np.full(num_ecDNA, -1)
         for i in range(len(capacity)) :
-            capacity[i] = species_capacity[species_idx[i]]
+            capacity[i] = self.species_capacity[species_idx[i]]
 
         # Tracks which sister
         sister = np.full(num_ecDNA, -1)
@@ -813,9 +813,9 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         for i in range(len(parental_ecdna_array)) :
             for j in range(len(parental_ecdna_array)) :
                 if i >= j :
-                    if coeff_matrix_sim[i][j] > 0 :
+                    if self.coeff_matrix_sim[i][j] > 0 :
 
-                        num_collisions = int((np.sqrt(parental_ecdna_array[i] * parental_ecdna_array[j]) * simulation_multiplier))
+                        num_collisions = int((np.sqrt(parental_ecdna_array[i] * parental_ecdna_array[j]) * self.simulation_multiplier))
                         collision_starts.append(starts[i] + np.random.randint(0, parental_ecdna_array[i], size=num_collisions))
                         collision_ends.append(starts[j] + np.random.randint(0, parental_ecdna_array[j], size=num_collisions))
         
@@ -835,7 +835,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
                     rand_val = random()
 
                     # Make connection
-                    if rand_val < coeff_matrix_sim[species_idx[rand_connection]][species] :
+                    if rand_val < self.coeff_matrix_sim[species_idx[rand_connection]][species] :
 
                         # Find the starts of the tree
                         idx1 = idx
