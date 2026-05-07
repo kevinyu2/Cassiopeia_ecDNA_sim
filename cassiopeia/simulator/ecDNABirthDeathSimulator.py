@@ -791,8 +791,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         parental_ecdna_array = parental_ecdna_array.astype(int)
         species_idx = np.repeat(np.arange(len(parental_ecdna_array)), parental_ecdna_array)
 
-        starts = np.cumsum([0] + parental_ecdna_array[:-1])
-
+        starts = np.concatenate(([0], np.cumsum(parental_ecdna_array[:-1])))
         num_ecDNA = len(species_idx)
 
         # Tracks pointers to front
@@ -813,7 +812,7 @@ class ecDNABirthDeathSimulator(BirthDeathFitnessSimulator):
         for i in range(len(parental_ecdna_array)) :
             for j in range(len(parental_ecdna_array)) :
                 if i >= j :
-                    if self.coeff_matrix_sim[i][j] > 0 :
+                    if self.coeff_matrix_sim[i][j] > 0 and parental_ecdna_array[i] > 0 and parental_ecdna_array[j] > 0:
 
                         num_collisions = int((np.sqrt(parental_ecdna_array[i] * parental_ecdna_array[j]) * self.simulation_multiplier))
                         collision_starts.append(starts[i] + np.random.randint(0, parental_ecdna_array[i], size=num_collisions))
